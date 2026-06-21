@@ -6,7 +6,7 @@
   "scripts": {
   "dev": "vite dev",
   "build": "node scripts/clean-public.mjs && vite build && node scripts/prepare-vercel-output.mjs",
-  "build:vercel": "node scripts/clean-public.mjs && vite build && node scripts/prepare-vercel-output.mjs",
+  "build:vercel": "node scripts/clean-public.mjs && npx vite build && node scripts/prepare-vercel-output.mjs",
   "build:dev": "vite build --mode development",
   "preview": "vite preview",
   "lint": "eslint .",

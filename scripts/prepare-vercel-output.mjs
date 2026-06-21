@@ -11,14 +11,42 @@ import { resolve, join } from "node:path";
 
 const root = process.cwd();
 
-// Lovable/TanStack Start outputs here
-const clientDir = resolve(root, ".output/public");
+console.log("=== DEBUG BUILD OUTPUT ===");
+console.log("Root:", root);
 
-if (!existsSync(clientDir)) {
-  throw new Error(".output/public missing — run `vite build` first.");
+try {
+  console.log("Root files/folders:");
+  console.log(readdirSync(root));
+} catch (e) {
+  console.error("Unable to read root directory", e);
 }
 
-// Copy built assets into public/
+const outputDir = resolve(root, ".output");
+
+console.log(".output exists:", existsSync(outputDir));
+
+if (existsSync(outputDir)) {
+  try {
+    console.log(".output contents:");
+    console.log(readdirSync(outputDir));
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+const clientDir = resolve(root, ".output/public");
+
+console.log(".output/public exists:", existsSync(clientDir));
+
+if (!existsSync(clientDir)) {
+  console.error("");
+  console.error("❌ BUILD FAILED");
+  console.error(".output/public does not exist.");
+  console.error("");
+  console.error("Please check the logs above to see what Vite generated.");
+  process.exit(1);
+}
+
 const target = resolve(root, "public");
 
 rmSync(target, { recursive: true, force: true });
@@ -26,7 +54,7 @@ mkdirSync(target, { recursive: true });
 
 cpSync(clientDir, target, { recursive: true });
 
-console.log("Copied .output/public -> public");
+console.log("✅ Copied .output/public -> public");
 
 const assetsDir = join(target, "assets");
 
@@ -39,9 +67,11 @@ const assetFiles = readdirSync(assetsDir);
 async function renderStaticHtml() {
   const serverEntry = resolve(root, ".output/server/index.mjs");
 
+  console.log("SSR entry exists:", existsSync(serverEntry));
+
   if (!existsSync(serverEntry)) {
     console.warn(
-      "No SSR server entry found at .output/server/index.mjs, using SPA fallback"
+      "No SSR server entry found at .output/server/index.mjs"
     );
     return undefined;
   }
@@ -52,7 +82,7 @@ async function renderStaticHtml() {
   const handler = mod.default;
 
   if (!handler?.fetch) {
-    console.warn("SSR handler missing fetch(), using SPA fallback");
+    console.warn("SSR handler missing fetch()");
     return undefined;
   }
 
@@ -67,6 +97,8 @@ async function renderStaticHtml() {
     runtimeContext
   );
 
+  console.log("SSR response status:", response.status);
+
   if (!response.ok) {
     throw new Error(`SSR render failed with status ${response.status}`);
   }
@@ -74,8 +106,9 @@ async function renderStaticHtml() {
   return await response.text();
 }
 
-// Find TanStack client entry
-const indexJs = assetFiles.filter((f) => /^index-.*\.js$/.test(f));
+const indexJs = assetFiles.filter((f) =>
+  /^index-.*\.js$/.test(f)
+);
 
 let entryJs =
   indexJs.find((candidate) => {
@@ -100,24 +133,26 @@ const stylesCss =
   assetFiles.find((f) => /^styles-.*\.css$/.test(f)) ??
   assetFiles.find((f) => f.endsWith(".css"));
 
-if (!entryJs) {
-  throw new Error(
-    "Could not find client entry JS in .output/public/assets"
-  );
-}
+console.log("Entry JS:", entryJs);
+console.log("Styles CSS:", stylesCss);
 
-// Try SSR first
-const staticHtml = await renderStaticHtml();
+let staticHtml;
+
+try {
+  staticHtml = await renderStaticHtml();
+  console.log("SSR HTML length:", staticHtml?.length);
+} catch (err) {
+  console.error("SSR render error:");
+  console.error(err);
+  throw err;
+}
 
 if (staticHtml) {
   writeFileSync(join(target, "index.html"), staticHtml);
-
-  console.log("Wrote public/index.html from SSR output");
-
+  console.log("✅ Wrote SSR index.html");
   process.exit(0);
 }
 
-// SPA fallback
 const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -139,6 +174,5 @@ ${stylesCss ? `<link rel="stylesheet" href="/assets/${stylesCss}" />` : ""}
 
 writeFileSync(join(target, "index.html"), html);
 
-console.log(
-  `Wrote SPA fallback public/index.html (entry=${entryJs})`
-);
+console.log("⚠️ Using SPA fallback");
+console.log("✅ Wrote public/index.html");

@@ -21,144 +21,61 @@ try {
   console.error("Unable to read root directory", e);
 }
 
-const outputDir = resolve(root, ".output");
+// ✅ VITE OUTPUT (FIXED)
+const distDir = resolve(root, "dist");
 
-console.log(".output exists:", existsSync(outputDir));
+console.log("dist exists:", existsSync(distDir));
 
-if (existsSync(outputDir)) {
-  try {
-    console.log(".output contents:");
-    console.log(readdirSync(outputDir));
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-const clientDir = resolve(root, ".output/public");
-
-console.log(".output/public exists:", existsSync(clientDir));
-
-if (!existsSync(clientDir)) {
+if (!existsSync(distDir)) {
   console.error("");
   console.error("❌ BUILD FAILED");
-  console.error(".output/public does not exist.");
+  console.error("dist folder does not exist.");
   console.error("");
-  console.error("Please check the logs above to see what Vite generated.");
+  console.error("Run: npm run build and check if dist/ is created.");
   process.exit(1);
 }
+
+console.log("dist contents:");
+console.log(readdirSync(distDir));
+
+// =====================
+// COPY DIST → PUBLIC
+// =====================
 
 const target = resolve(root, "public");
 
 rmSync(target, { recursive: true, force: true });
 mkdirSync(target, { recursive: true });
 
-cpSync(clientDir, target, { recursive: true });
+cpSync(distDir, target, { recursive: true });
 
-console.log("✅ Copied .output/public -> public");
+console.log("✅ Copied dist -> public");
 
-const assetsDir = join(target, "assets");
+// =====================
+// FIND ENTRY FILES
+// =====================
 
-if (!existsSync(assetsDir)) {
-  throw new Error("assets directory missing from build output");
-}
+const assetFiles = readdirSync(join(target, "assets"));
 
-const assetFiles = readdirSync(assetsDir);
+const jsFiles = assetFiles.filter((f) => f.endsWith(".js"));
+const cssFiles = assetFiles.filter((f) => f.endsWith(".css"));
 
-async function renderStaticHtml() {
-  const serverEntry = resolve(root, ".output/server/index.mjs");
-
-  console.log("SSR entry exists:", existsSync(serverEntry));
-
-  if (!existsSync(serverEntry)) {
-    console.warn(
-      "No SSR server entry found at .output/server/index.mjs"
-    );
-    return undefined;
-  }
-
-  console.log("Using SSR entry:", serverEntry);
-
-  const mod = await import(`file://${serverEntry}`);
-  const handler = mod.default;
-
-  if (!handler?.fetch) {
-    console.warn("SSR handler missing fetch()");
-    return undefined;
-  }
-
-  const runtimeContext = {
-    waitUntil() {},
-    passThroughOnException() {},
-  };
-
-  const response = await handler.fetch(
-    new Request("https://mentorship.girlsleadingtech.com/"),
-    {},
-    runtimeContext
-  );
-
-  console.log("SSR response status:", response.status);
-
-  if (!response.ok) {
-    throw new Error(`SSR render failed with status ${response.status}`);
-  }
-
-  return await response.text();
-}
-
-const indexJs = assetFiles.filter((f) =>
-  /^index-.*\.js$/.test(f)
-);
-
-let entryJs =
-  indexJs.find((candidate) => {
-    const body = readFileSync(join(assetsDir, candidate), "utf8");
-
-    return (
-      body.includes("hydrateRoot(document") ||
-      body.includes(".hydrateRoot(document")
-    );
-  }) ??
-  indexJs.find((candidate) => {
-    const body = readFileSync(join(assetsDir, candidate), "utf8");
-
-    return (
-      body.includes("__TSS_START_OPTIONS__") ||
-      body.includes("$_TSR")
-    );
-  }) ??
-  indexJs[0];
-
-const stylesCss =
-  assetFiles.find((f) => /^styles-.*\.css$/.test(f)) ??
-  assetFiles.find((f) => f.endsWith(".css"));
+let entryJs = jsFiles[0];
+let stylesCss = cssFiles[0];
 
 console.log("Entry JS:", entryJs);
 console.log("Styles CSS:", stylesCss);
 
-let staticHtml;
-
-try {
-  staticHtml = await renderStaticHtml();
-  console.log("SSR HTML length:", staticHtml?.length);
-} catch (err) {
-  console.error("SSR render error:");
-  console.error(err);
-  throw err;
-}
-
-if (staticHtml) {
-  writeFileSync(join(target, "index.html"), staticHtml);
-  console.log("✅ Wrote SSR index.html");
-  process.exit(0);
-}
+// =====================
+// GENERATE SIMPLE INDEX.HTML
+// =====================
 
 const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Girls Leading Tech</title>
+<title>App</title>
 
 ${stylesCss ? `<link rel="stylesheet" href="/assets/${stylesCss}" />` : ""}
 
@@ -174,5 +91,5 @@ ${stylesCss ? `<link rel="stylesheet" href="/assets/${stylesCss}" />` : ""}
 
 writeFileSync(join(target, "index.html"), html);
 
-console.log("⚠️ Using SPA fallback");
 console.log("✅ Wrote public/index.html");
+console.log("🚀 Build ready for Vercel");
